@@ -1,4 +1,4 @@
-# Friendzone API
+# Friendzone
 
 A minimal ASP.NET Core API targeting .NET 10.
 
@@ -25,3 +25,21 @@ dotnet run --urls http://localhost:5000
 ```sh
 dotnet build
 ```
+
+## Project Structure
+
+Source code lives under `src/`, while `Friendzone.csproj` stays at the repository root. Run and build commands above still work from the repository root.
+
+```text
+Friendzone.csproj
+src/
+├── Program.cs
+├── Core/
+└── Http/
+    ├── Controllers/
+    └── Middlewares/
+```
+
+- `src/Program.cs` configures and starts the application.
+- `src/Http/` represents the Presentation layer. It contains controllers that handle HTTP requests and return responses, along with HTTP middleware.
+- `src/Core/` contains the domain objects that represent the application's business concepts and rules.

@@ -1,0 +1,113 @@
+= Middleware
+:toc: left
+:sectnums:
+:source-highlighter: highlight.js
+
+Middleware handles HTTP requests as they pass through an ASP.NET Core application's pipeline.
+It can inspect a request, call the next component, and process the response when control returns.
+In Friendzone, middleware belongs to the Presentation layer under `src/Http/Middlewares/`.
+
+== Writing middleware in ASP.NET Core
+
+This guide uses the existing `src/Http/Middlewares/Logger.cs` implementation, which logs the request method and path, then the response status code.
+
+=== Create the middleware class
+
+Create a public class with a constructor that accepts a `RequestDelegate` and a public `InvokeAsync` method that returns `Task` and accepts `HttpContext` as its first parameter.
+ASP.NET Core recognizes this convention without requiring an interface.
+
+[source,csharp]
+----
+namespace Friendzone.Http.Middlewares;
+
+public class Logger
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<Logger> _logger;
+
+    public Logger(RequestDelegate next, ILogger<Logger> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        _logger.LogInformation(
+            "Request: {Method} {Path}",
+            context.Request.Method,
+            context.Request.Path);
+
+        await _next(context);
+
+        _logger.LogInformation(
+            "Response: {StatusCode}",
+            context.Response.StatusCode);
+    }
+}
+----
+
+`RequestDelegate` represents the remaining pipeline.
+`HttpContext` provides access to the current request and response.
+`ILogger<Logger>` writes structured log messages using the application's logging configuration.
+The placeholders `{Method}`, `{Path}`, and `{StatusCode}` preserve named values for logging providers.
+
+The project's Web SDK and enabled implicit usings supply the namespaces needed by this example.
+
+=== Understand the request flow
+
+The code before `await _next(context)` logs the incoming request.
+Calling `_next` lets downstream middleware and the selected endpoint handle it.
+When that processing returns successfully, execution continues after the `await` and logs the response status code.
+
+[source,text]
+----
+Request -> Logger: log method and path
+        -> Endpoint: handle request
+        -> Logger: log response status
+        -> Client
+----
+
+If downstream processing throws an exception, the response log statement is skipped.
+This example does not catch exceptions or provide error handling.
+
+A middleware can also end processing early by writing a response and returning without calling `_next`.
+The logger calls `_next` so requests continue to their endpoints.
+
+=== Register the middleware
+
+Add the namespace import and call `UseMiddleware<Logger>()` in `src/Program.cs` after building the application and before mapping endpoints:
+
+[source,csharp]
+----
+using Friendzone.Http.Middlewares;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+app.UseMiddleware<Logger>();
+
+app.MapControllers();
+app.MapGet("/hello", () => Results.Text("Hello from /hello"));
+
+app.Run();
+----
+
+`UseMiddleware<Logger>()` supplies the next delegate and resolves `ILogger<Logger>` through dependency injection.
+This convention-based middleware does not need a separate `AddTransient<Logger>()` registration.
+
+Middleware executes in registration order on the way into the pipeline and returns in reverse order.
+Place middleware according to which downstream operations it needs to observe.
+
+=== Handle dependency lifetimes
+
+Convention-based middleware instances live for the application lifetime and may process concurrent requests.
+Keep request-specific data in local variables inside `InvokeAsync`, rather than instance fields.
+If a middleware needs a scoped service, register that service with dependency injection and accept it as an additional `InvokeAsync` parameter instead of a constructor parameter.
+
+=== References
+
+* https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/write?view=aspnetcore-10.0[Microsoft Learn: Write custom ASP.NET Core middleware]
+* https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/?view=aspnetcore-10.0[Microsoft Learn: ASP.NET Core middleware]
