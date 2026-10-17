@@ -1,6 +1,10 @@
 using Friendzone.Http.Middlewares;
+using Friendzone.Providers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddEmailSender();
+
 builder.Services.AddControllers();
 
 var app = builder.Build();
